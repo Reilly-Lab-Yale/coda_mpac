@@ -1003,6 +1003,10 @@ class BassetBranched(ptl.LightningModule):
         group.add_argument('--use_weight_norm',type=utils.str2bool, default=False)
         
         group.add_argument('--loss_criterion', type=str, default='L1KLmixed')
+        group.add_argument('--criterion_reduction', type=str, default='mean')
+        group.add_argument('--mse_scale', type=float, default=1.0)
+        group.add_argument('--kl_scale', type=float, default=1.0)
+
                 
         return parser
     
@@ -1053,7 +1057,7 @@ class BassetBranched(ptl.LightningModule):
                  n_branched_layers=1, branched_channels=250, 
                  branched_activation='ReLU6', branched_dropout_p=0., 
                  n_outputs=280,
-                 use_batch_norm=True, use_weight_norm=False, 
+                 use_batch_norm=True, criterion_reduction='mean', mse_scale=1.0, kl_scale=1.0, use_weight_norm=False, 
                  loss_criterion='L1KLmixed', loss_args={}):
         """
         Initialize the BassetBranched model.
