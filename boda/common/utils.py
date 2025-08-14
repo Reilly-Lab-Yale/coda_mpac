@@ -561,7 +561,7 @@ def model_fn(model_dir):
     Returns:
         torch.nn.Module: Loaded model in evaluation mode.
     """
-    checkpoint = torch.load(os.path.join(model_dir,'torch_checkpoint.pt'))
+    checkpoint = torch.load(os.path.join(model_dir,'torch_checkpoint.pt'),weights_only=False)
     model_module = getattr(_model, checkpoint['model_module'])
     model        = model_module(**vars(checkpoint['model_hparams']))
     model.load_state_dict(checkpoint['model_state_dict'])
