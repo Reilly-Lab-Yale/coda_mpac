@@ -555,6 +555,117 @@ class activity_filtering(object):
         indexing_tensor = preds[indexer] * _filter.add(_mask.mul(1/epsilon))
         return indexing_tensor
 
+# Add this function to your script (before main function)
+def tensor_to_sequence(tensor, alphabet=constants.STANDARD_NT):
+    """
+    Convert a one-hot encoded tensor to a DNA sequence string.
+    
+    Args:
+        tensor (torch.Tensor): One-hot encoded tensor of shape (channels, length)
+        alphabet (list): List of nucleotide characters
+    
+    Returns:
+        str: DNA sequence string
+    """
+    if tensor.dim() > 2:
+        tensor = tensor.squeeze()
+    
+    # Get the argmax along the channel dimension
+    indices = tensor.argmax(dim=0)
+    
+    # Convert indices to characters
+    sequence = ''.join([alphabet[i] for i in indices])
+    return sequence
+
+def extract_sequences_from_batch_universal(ref_batch, alt_batch, alphabet=constants.STANDARD_NT):
+    """
+    Universal sequence extraction that works with both VcfDataset and VcfDataset_Indel formats.
+    
+    Args:
+        ref_batch (torch.Tensor): Reference tensor batch
+        alt_batch (torch.Tensor): Alternative tensor batch  
+        alphabet (list): Nucleotide alphabet
+        
+    Returns:
+        tuple: (ref_sequences, alt_sequences) - lists of sequences for each batch item
+    """
+    ref_sequences = []
+    alt_sequences = []
+    
+    # Handle 6D tensors: [batch, 1, strands, windows, channels, length] (VcfDataset_Indel)
+    if len(ref_batch.shape) == 6:
+        batch_size = ref_batch.shape[0]
+        
+        for batch_idx in range(batch_size):
+            ref_batch_seqs = []
+            alt_batch_seqs = []
+            
+            # Remove singleton dimension: [strands, windows, channels, length]
+            ref_item = ref_batch[batch_idx].squeeze(0)  
+            alt_item = alt_batch[batch_idx].squeeze(0)
+            
+            strands, windows = ref_item.shape[0], ref_item.shape[1]
+            
+            for strand_idx in range(strands):
+                strand_name = "forward" if strand_idx == 0 else "reverse"
+                
+                for window_idx in range(windows):
+                    ref_seq = tensor_to_sequence(ref_item[strand_idx, window_idx], alphabet)
+                    alt_seq = tensor_to_sequence(alt_item[strand_idx, window_idx], alphabet)
+                    
+                    ref_batch_seqs.append(f"strand_{strand_name}_window_{window_idx:02d}:{ref_seq}")
+                    alt_batch_seqs.append(f"strand_{strand_name}_window_{window_idx:02d}:{alt_seq}")
+            
+            ref_sequences.append(ref_batch_seqs)
+            alt_sequences.append(alt_batch_seqs)
+    
+    # Handle 5D tensors: [batch, strands, windows, channels, length] (original VcfDataset)
+    elif len(ref_batch.shape) == 5:
+        batch_size = ref_batch.shape[0]
+        
+        for batch_idx in range(batch_size):
+            ref_batch_seqs = []
+            alt_batch_seqs = []
+            
+            strands, windows = ref_batch.shape[1], ref_batch.shape[2]
+            
+            for strand_idx in range(strands):
+                strand_name = "forward" if strand_idx == 0 else "reverse"
+                
+                for window_idx in range(windows):
+                    ref_seq = tensor_to_sequence(ref_batch[batch_idx, strand_idx, window_idx], alphabet)
+                    alt_seq = tensor_to_sequence(alt_batch[batch_idx, strand_idx, window_idx], alphabet)
+                    
+                    ref_batch_seqs.append(f"strand_{strand_name}_window_{window_idx:02d}:{ref_seq}")
+                    alt_batch_seqs.append(f"strand_{strand_name}_window_{window_idx:02d}:{alt_seq}")
+            
+            ref_sequences.append(ref_batch_seqs)
+            alt_sequences.append(alt_batch_seqs)
+    
+    # Handle 4D tensors: [batch, windows, channels, length] (no strands)
+    elif len(ref_batch.shape) == 4:
+        batch_size, n_windows = ref_batch.shape[:2]
+        
+        for batch_idx in range(batch_size):
+            ref_batch_seqs = []
+            alt_batch_seqs = []
+            
+            for window_idx in range(n_windows):
+                ref_seq = tensor_to_sequence(ref_batch[batch_idx, window_idx], alphabet)
+                alt_seq = tensor_to_sequence(alt_batch[batch_idx, window_idx], alphabet)
+                
+                ref_batch_seqs.append(f"window_{window_idx:02d}:{ref_seq}")
+                alt_batch_seqs.append(f"window_{window_idx:02d}:{alt_seq}")
+            
+            ref_sequences.append(ref_batch_seqs)
+            alt_sequences.append(alt_batch_seqs)
+    
+    else:
+        print(f"Warning: Unsupported tensor shape {ref_batch.shape} for sequence extraction")
+        return [], []
+    
+    return ref_sequences, alt_sequences
+
 def main(args):
     """
     Run the main processing pipeline for the given command-line arguments.
@@ -645,30 +756,6 @@ def main(args):
     alt_preds = []
     skew_preds= []
 
-    ### 08/22/2025 ###
-    # Add this logic in your main function, after creating vcf_data but before the prediction loop
-    if args.extract_original_sequences:
-        # Import the function (make sure the import path matches your structure)
-        from boda.data.fasta_datamodule import save_original_sequences  # Adjust import path as needed
-        
-        # Determine output file path
-        if args.original_sequence_output_file:
-            original_seq_output_path = args.original_sequence_output_file
-        else:
-            base_path = args.output.rsplit('.', 1)[0]  # Remove extension
-            original_seq_output_path = f"{base_path}_original_sequences.tsv"
-        
-        # Extract sequences using original method
-        # Use a subset for faster comparison (e.g., first 10 samples)
-        sample_count = len(vcf_data)
-        print(f"Extracting original sequences for first {sample_count} samples...")
-        
-        save_original_sequences(
-            vcf_data, 
-            original_seq_output_path, 
-            sample_indices=range(sample_count)
-        )
-
     ######################
     ## run through data ##
     ######################
@@ -682,6 +769,19 @@ def main(args):
 
             ref_allele = flank_builder(ref_allele).contiguous()
             alt_allele = flank_builder(alt_allele).contiguous()
+            if args.output_sequences:
+                # Store sequences before predictions
+                ref_seqs, alt_seqs = extract_sequences_from_batch_universal(
+                    ref_allele.cpu(), alt_allele.cpu(), constants.STANDARD_NT
+                )
+                
+                # Add to cumulative storage
+                if 'ref_sequences_all' not in locals():
+                    ref_sequences_all = []
+                    alt_sequences_all = []
+                
+                ref_sequences_all.extend(ref_seqs)
+                alt_sequences_all.extend(alt_seqs)
 
             all_preds = vep_tester(
                 ref_allele, alt_allele, 
@@ -757,6 +857,38 @@ def main(args):
         ref_preds = torch.cat(ref_preds, dim=0)
         alt_preds = torch.cat(alt_preds, dim=0)
         torch.save({'ref': ref_preds, 'alt': alt_preds, 'vcf': vcf_table}, args.output)
+    ##################
+    ## output seqs ###
+    ##################
+    if args.output_sequences:
+        # Determine output file path
+        if args.sequence_output_file:
+            seq_output_path = args.sequence_output_file
+        else:
+            base_path = args.output.rsplit('.', 1)[0]  # Remove extension
+            seq_output_path = f"{base_path}_sequences.tsv"
+        
+        # Create sequence output DataFrame
+        sequence_data = []
+        
+        for idx, (vcf_row, ref_seq_list, alt_seq_list) in enumerate(zip(vcf_table.iterrows(), ref_sequences_all, alt_sequences_all)):
+            _, vcf_record = vcf_row
+            
+            for ref_seq_entry, alt_seq_entry in zip(ref_seq_list, alt_seq_list):
+                sequence_data.append({
+                    'variant_idx': idx,
+                    'chrom': vcf_record['chrom'],
+                    'pos': vcf_record['pos'],
+                    'ref_allele': vcf_record['ref'],
+                    'alt_allele': vcf_record['alt'],
+                    'ref_sequence': ref_seq_entry,
+                    'alt_sequence': alt_seq_entry
+                })
+        
+        seq_df = pd.DataFrame(sequence_data)
+        seq_df.to_csv(seq_output_path, sep='\t', index=False)
+        print(f"Sequences saved to: {seq_output_path}")
+        print(f"Total sequence entries: {len(sequence_data)}")
 
 if __name__ == '__main__':
     
@@ -793,12 +925,11 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=10, help='Batch size during sequence extraction from FASTA.')
     parser.add_argument('--job_id', type=int, default=0, help='Job partition index for distributed computing.')
     parser.add_argument('--n_jobs', type=int, default=1, help='Total number of job partitions.')
+    # add sequence output
+    parser.add_argument('--output_sequences', type=utils.str2bool, default=False, 
+                   help='Output all generated sequences along with predictions.')
+    parser.add_argument('--sequence_output_file', type=str, 
+                    help='File path for sequence output. If not specified, uses output path with _sequences.tsv suffix.')
     
-    ### 08/22/2025 ###
-    # Add this to your argument parser in vcf_predict.py
-    parser.add_argument('--extract_original_sequences', type=utils.str2bool, default=False,
-                    help='Extract sequences using original OneHotSlicer method for comparison.')
-    parser.add_argument('--original_sequence_output_file', type=str,
-                    help='File path for original sequence output. If not specified, uses output path with _original_sequences.tsv suffix.')
     args = parser.parse_args()
     main(args)

@@ -1,3 +1,27 @@
+"""
+MIT License
+
+Copyright (c) 2025 Sagar Gosai, Rodrigo Castro
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"""
+
 import argparse
 import sys
 import random
@@ -537,7 +561,7 @@ def model_fn(model_dir):
     Returns:
         torch.nn.Module: Loaded model in evaluation mode.
     """
-    checkpoint = torch.load(os.path.join(model_dir,'torch_checkpoint.pt'))
+    checkpoint = torch.load(os.path.join(model_dir,'torch_checkpoint.pt'),weights_only=False)
     model_module = getattr(_model, checkpoint['model_module'])
     model        = model_module(**vars(checkpoint['model_hparams']))
     model.load_state_dict(checkpoint['model_state_dict'])

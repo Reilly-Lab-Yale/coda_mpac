@@ -1,3 +1,26 @@
+"""
+MIT License
+
+Copyright (c) 2025 Sagar Gosai, Rodrigo Castro
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"""
 import argparse
 import sys
 import math
@@ -979,7 +1002,10 @@ class BassetBranched(ptl.LightningModule):
         group.add_argument('--use_batch_norm', type=utils.str2bool, default=True)
         group.add_argument('--use_weight_norm',type=utils.str2bool, default=False)
         
+        group.add_argument('--criterion_reduction', type=str, default='mean')
         group.add_argument('--loss_criterion', type=str, default='L1KLmixed')
+        group.add_argument('--mse_scale', type=float, default=1.0)
+        group.add_argument('--kl_scale', type=float, default=1.0)
                 
         return parser
     
@@ -1031,6 +1057,7 @@ class BassetBranched(ptl.LightningModule):
                  branched_activation='ReLU6', branched_dropout_p=0., 
                  n_outputs=280,
                  use_batch_norm=True, use_weight_norm=False, 
+                 criterion_reduction='mean', mse_scale=1.0, kl_scale=1.0,
                  loss_criterion='L1KLmixed', loss_args={}):
         """
         Initialize the BassetBranched model.
@@ -1091,6 +1118,10 @@ class BassetBranched(ptl.LightningModule):
         self.use_batch_norm    = use_batch_norm
         self.use_weight_norm   = use_weight_norm
         
+        self.criterion_reduction=criterion_reduction
+        self.mse_scale         = mse_scale
+        self.kl_scale          = kl_scale
+
         self.pad1  = nn.ConstantPad1d(self.conv1_pad, 0.)
         self.conv1 = Conv1dNorm(4, 
                                 self.conv1_channels, self.conv1_kernel_size, 
