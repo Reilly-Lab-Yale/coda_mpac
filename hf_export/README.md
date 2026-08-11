@@ -2,9 +2,7 @@
 
 Tooling that repackages the CODA/MPAC model artifacts into a Hugging Face Hub
 repository. The goal is to remove the barriers in the original distribution
-format: a `.tar.gz` on a GCS bucket, holding a checkpoint whose hyperparameters
-are a pickled `argparse.Namespace`, loadable only with `weights_only=False` and
-an install of `boda` pinned to `lightning==1.9.5`.
+format.
 
 The export depends on `torch`, `safetensors`, and `huggingface_hub` only.
 
@@ -26,19 +24,33 @@ paths for this cluster as module-level constants; edit them before reuse elsewhe
 
 ## Published model
 
-https://huggingface.co/saarantras1/MPAC -- the 110 MPAC checkpoints as safetensors.
+https://huggingface.co/saarantras1/MPAC: the 110 MPAC checkpoints as safetensors.
 That repository is itself a git repo, so the weights are versioned there; this
 directory holds the conversion and verification tooling, which is not shipped to the
 Hub apart from `modeling_mpac.py`.
 
-## What was verified
+## Verification
 
 | Check | Tool | Result |
 | --- | --- | --- |
 | Conversion fidelity | `convert.py` (inline) | 110/110 bitwise-identical to the `boda` loader |
 | Artifact provenance | `compare_zenodo.py` | 110/110 byte-identical to the Zenodo deposit |
 | Inference path | `crosscheck_malinois.py` | agrees with an independent implementation to 5 decimals |
-| Model performance | `verify.py` | 0.892 / 0.888 / 0.879 vs 0.89 / 0.89 / 0.88 in the preprint |
+| Model performance | `verify.py` | 0.855 / 0.854 / 0.858 on Table S2 (see strand note below) |
+
+## Strand convention
+
+`predict` reverse-complements the 200 bp insert and re-flanks it in the forward
+orientation, matching `src/vcf_predict.py`, which produced the published MPAC
+predictions. Flipping the assembled 600 bp construct instead -- what the CODA
+tutorial does -- scores ~0.035 higher against Table S2 and reproduces the preprint's
+Fig. 1B values, but would desynchronise this model from every published MPAC number.
+The convention was chosen for consistency, not accuracy.
+
+`crosscheck_malinois.py` deliberately uses the whole-construct flip, since the
+independent reference it compares against was computed that way. It validates the
+weights, one-hot encoding, flank construction and forward pass -- everything except
+the strand choice.
 
 The inference-path cross-check is the one that matters most: bitwise weight parity
 does not cover flanking or reverse-complement handling, and a bug there cost about

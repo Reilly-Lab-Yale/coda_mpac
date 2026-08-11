@@ -405,13 +405,20 @@ class MPACModel(
             for start in range(0, len(sequences), batch_size):
                 chunk = sequences[start:start + batch_size]
                 batch = torch.stack([dna2tensor(s.upper()) for s in chunk]).to(device)
-                # Flanks go on first: the reverse complement is of the whole 600 bp
-                # construct, vector context included. Flipping the bare insert and
-                # then adding forward-orientation flanks is not a reverse complement.
-                prepped = self.add_flanks(batch)
-                preds = self(prepped)
+                preds = self(self.add_flanks(batch))
                 if rc_average:
-                    preds = (preds + self(prepped.flip(dims=[1, 2]))).div(2.)
+                    # The reverse strand is the reverse complement of the INSERT ONLY,
+                    # re-flanked in the forward orientation -- not a flip of the
+                    # assembled 600 bp tensor. This looks like a bug and is not: it
+                    # matches `src/vcf_predict.py` in sjgosai/boda2, which produced the
+                    # published MPAC predictions, and it models the real experiment
+                    # (a fixed plasmid with the insert cloned backwards).
+                    #
+                    # Flipping the flanked tensor instead scores ~0.035 higher against
+                    # Table S2, so the temptation to "fix" this is real. Don't: it would
+                    # silently desynchronise this model from every published MPAC number.
+                    rc = self.add_flanks(batch.flip(dims=[1, 2]))
+                    preds = (preds + self(rc)).div(2.)
                 results.append(preds.cpu())
         finally:
             self.train(was_training)

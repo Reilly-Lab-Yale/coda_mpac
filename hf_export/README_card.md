@@ -17,7 +17,6 @@ MPAC (Malinois with Parallel Aggregated Cross-validation) predicts cis-regulator
 activity of 200 bp human sequences in K562, HepG2 and SK-N-SH, and the allelic skew
 caused by non-coding variants.
 
-**The paper is the source of truth for what this model is and how it was evaluated:**
 [Identifying non-coding variant effects at scale via machine learning models of
 cis-regulatory reporter assays](https://doi.org/10.1101/2025.04.16.648420).
 
@@ -40,6 +39,11 @@ Use `from_pretrained` and `predict` rather than loading a checkpoint or calling 
 model directly: they select the ensemble that did not train on your query's
 chromosome, and they add the MPRA vector context and average over both strands.
 Skipping either step returns plausible-looking but wrong numbers instead of an error.
+
+`predict` follows `vcf_predict.py` from the upstream code base, which generated the
+published predictions: the reverse strand is the reverse complement of the 200 bp
+insert placed back in the forward-orientation vector, matching the assay, rather
+than a reverse complement of the whole 600 bp construct.
 
 MPAC covers autosomes only; `from_pretrained` raises on chrX, chrY and anything else
 with no held-out fold.
