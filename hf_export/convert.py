@@ -194,8 +194,17 @@ def convert_one(checkpoint, src, dest, bucket_map, config_ref):
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--crossval_root', required=True,
+    parser.add_argument('--crossval_root',
                         help='Directory of chr<a>_<b>/ subdirs holding crossval artifacts')
+    parser.add_argument('--single',
+                        help='Convert one artifact to model.safetensors at the export root, '
+                             'for a single-model repo such as the original Malinois. '
+                             'Mutually exclusive with --crossval_root.')
+    parser.add_argument('--module_name', default='modeling_mpac.py',
+                        help='Filename to give the model definition in the export')
+    parser.add_argument('--source_url',
+                        help='Canonical origin to record in provenance.json for --single, '
+                             'when the artifact is not covered by --pull_script')
     parser.add_argument('--pull_script', default=None,
                         help='pull_models_home.py, used to recover gs:// source URLs')
     parser.add_argument('--out', required=True, help='Output directory')
@@ -206,11 +215,26 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     bucket_map = parse_bucket_map(args.pull_script)
 
+    assert bool(args.crossval_root) != bool(args.single), \
+        "pass exactly one of --crossval_root or --single"
+
     config = None
     records = []
 
+    if args.single:
+        print(f'[single] {args.single}', flush=True)
+        config, record = convert_one(
+            read_artifact(args.single), args.single,
+            os.path.join(args.out, 'model.safetensors'), bucket_map, None
+        )
+        record['role'] = 'default'
+        if args.source_url:
+            record['source'] = args.source_url
+        records.append(record)
+
     folds = sorted(d for d in os.listdir(args.crossval_root)
-                   if os.path.isdir(os.path.join(args.crossval_root, d)))
+                   if os.path.isdir(os.path.join(args.crossval_root, d))) \
+        if args.crossval_root else []
     n_done = 0
     for fold in folds:
         fold_dir = os.path.join(args.crossval_root, fold)
@@ -241,7 +265,7 @@ def main():
             print(f'[crossval {n_done}] {fold}/{name} -> {os.path.relpath(dest, args.out)}',
                   flush=True)
 
-    assert records, f"no .tar.gz artifacts found under {args.crossval_root}"
+    assert records, "no artifacts converted"
 
     with open(os.path.join(args.out, 'config.json'), 'w') as handle:
         json.dump(config, handle, indent=2, sort_keys=True)
@@ -253,7 +277,7 @@ def main():
 
     shutil.copy(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              'mpac_hf', 'modeling_mpac.py'),
-                os.path.join(args.out, 'modeling_mpac.py'))
+                os.path.join(args.out, args.module_name))
 
     n_missing = sum(1 for r in records if not r['source'].startswith('gs://'))
     print(f'\nconverted {len(records)} checkpoints into {args.out}')

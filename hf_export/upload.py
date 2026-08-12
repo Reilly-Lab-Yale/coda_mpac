@@ -18,7 +18,8 @@ import sys
 
 from huggingface_hub import HfApi
 
-REQUIRED = ['config.json', 'provenance.json', 'modeling_mpac.py']
+REQUIRED = ['config.json', 'provenance.json']
+MODULES = ['modeling_mpac.py', 'modeling_malinois.py']
 
 # Regenerable analysis output that verify.py leaves in the export directory. It
 # is large, not a model artifact, and would only go stale on the Hub.
@@ -43,14 +44,25 @@ def main():
         path = os.path.join(args.export, name)
         assert os.path.isfile(path), f"export is missing {name}; run convert.py first"
 
+    assert any(os.path.isfile(os.path.join(args.export, m)) for m in MODULES), \
+        f"export has none of {MODULES}; run convert.py first"
+
     n_crossval = len([
         f for _, _, files in os.walk(os.path.join(args.export, 'crossval'))
         for f in files if f.endswith('.safetensors')
     ])
-    assert n_crossval == 110, \
-        f"expected 110 crossval checkpoints, found {n_crossval}"
-    assert not os.path.exists(os.path.join(args.export, 'model.safetensors')), \
-        "export contains a root model.safetensors; this repo publishes MPAC folds only"
+    has_root_model = os.path.isfile(os.path.join(args.export, 'model.safetensors'))
+
+    # Two valid shapes. The MPAC export must NOT carry a root model: every
+    # checkpoint is fold-bound, so a default one would be a default way to leak
+    # training data. A single-model export (Malinois) is the mirror image.
+    if n_crossval:
+        assert n_crossval == 110, f"expected 110 crossval checkpoints, found {n_crossval}"
+        assert not has_root_model, \
+            "fold export also contains a root model.safetensors; that would become the " \
+            "chromosome-agnostic default this layout exists to prevent"
+    else:
+        assert has_root_model, "export has neither crossval checkpoints nor model.safetensors"
 
     total_bytes = sum(
         os.path.getsize(os.path.join(root, f))

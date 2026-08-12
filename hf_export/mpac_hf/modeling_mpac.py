@@ -49,7 +49,7 @@ except ImportError:  # keeps the file usable as a plain torch module offline
 
 __all__ = [
     'STANDARD_NT', 'MPRA_UPSTREAM', 'MPRA_DOWNSTREAM', 'CELL_TYPES',
-    'dna2tensor', 'MPACModel', 'MPACEnsemble', 'fold_for_chromosome',
+    'dna2tensor', 'MPACModel', 'MalinoisModel', 'MPACEnsemble', 'fold_for_chromosome',
 ]
 
 # -----------------------------------------------------------------------------
@@ -508,6 +508,14 @@ class MPACEnsemble(nn.Module):
         assert len(models) == 10, \
             f"expected 10 replicates for {fold}, found {len(models)}"
         return cls(models).to(device)
+
+
+# The architecture is Malinois's `BassetBranched`; the MPAC checkpoints are the same
+# network retrained per chromosome fold. The original single Malinois model is
+# published as a separate Hub repo, which ships this same file under the name
+# `modeling_malinois.py` and imports the alias below. Keeping one source file means a
+# fix to `predict` cannot land in one release and not the other.
+MalinoisModel = MPACModel
 
 
 def fold_for_chromosome(provenance, chromosome):

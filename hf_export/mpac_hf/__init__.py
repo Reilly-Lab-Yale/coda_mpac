@@ -5,11 +5,12 @@ from .modeling_mpac import (
     STANDARD_NT,
     MPACEnsemble,
     MPACModel,
+    MalinoisModel,
     dna2tensor,
     fold_for_chromosome,
 )
 
 __all__ = [
     'CELL_TYPES', 'MPRA_DOWNSTREAM', 'MPRA_UPSTREAM', 'STANDARD_NT',
-    'MPACEnsemble', 'MPACModel', 'dna2tensor', 'fold_for_chromosome',
+    'MPACEnsemble', 'MPACModel', 'MalinoisModel', 'dna2tensor', 'fold_for_chromosome',
 ]
