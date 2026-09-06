@@ -48,7 +48,17 @@ than a reverse complement of the whole 600 bp construct.
 MPAC covers autosomes only; `from_pretrained` raises on chrX, chrY and anything else
 with no held-out fold.
 
-For variant-effect prediction, see
+For allelic skew, pass matched reference and alternate contexts of 371 bp -- 180 bp
+upstream of the variant, the variant, 190 bp downstream. Each is tiled into eighteen
+200 bp windows at stride 10 and averaged, reproducing the scheme behind the
+published predictions.
+
+```python
+out = ensemble.predict_skew(ref_contexts, alt_contexts, device="cuda")
+out["skew"]   # (n, 3), alt minus ref
+```
+
+Command-line tooling for VCF-scale runs lives at
 [john-c-butts/MPAC](https://github.com/john-c-butts/MPAC).
 
 ## Citation

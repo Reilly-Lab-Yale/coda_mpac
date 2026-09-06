@@ -50,6 +50,7 @@ except ImportError:  # keeps the file usable as a plain torch module offline
 __all__ = [
     'STANDARD_NT', 'MPRA_UPSTREAM', 'MPRA_DOWNSTREAM', 'CELL_TYPES',
     'dna2tensor', 'MPACModel', 'MalinoisModel', 'MPACEnsemble', 'fold_for_chromosome',
+    'MPAC_CONTEXT_UPSTREAM', 'MPAC_CONTEXT_DOWNSTREAM', 'MPAC_STEP_SIZE',
 ]
 
 # -----------------------------------------------------------------------------
@@ -65,6 +66,13 @@ MPRA_UPSTREAM = 'ACGAAAATGTTGGATGCTCATACTCGTCCTTTTTCAATATTATTGAAGCATTTATCAGGGTTA
 MPRA_DOWNSTREAM = 'CACTGCGGCTCCTGCGATCTAACTGGCCGGTACCTGAGCTCGCTAGCCTCGAGGATATCAAGATCTGGCCTCGGCGGCCAAGCTTAGACACTAGAGGGTATATAATGGAAGCTCGACTTCCAGCTTGGCAATCCGGTACTGTTGGTAAAGCCACCATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGACGGCGACGTAAACGGCCACAAGTTCAGCGTGTCCGGCGAGGGCGAGGGCGATGCCACCTACGGCAAGCTGACCCTGAAGTTCATCT'
 
 CELL_TYPES = ['K562', 'HepG2', 'SKNSH']
+
+# Genomic context reproducing `vcf_predict.py --relative_start 9 --relative_end 181
+# --step_size 10`: 371 bp running from 180 bp before the variant to 190 bp after it,
+# sliced into eighteen 200 bp windows at stride 10.
+MPAC_CONTEXT_UPSTREAM = 180
+MPAC_CONTEXT_DOWNSTREAM = 190
+MPAC_STEP_SIZE = 10
 
 
 def dna2tensor(sequence_str, vocab_list=STANDARD_NT):
@@ -425,6 +433,44 @@ class MPACModel(
 
         return torch.cat(results, dim=0)
 
+    def predict_windows(self, sequences, step_size=MPAC_STEP_SIZE, **kwargs):
+        """Average predictions over the tiled windows of longer sequences.
+
+        Each sequence is cut into `variable_region_len` windows at `step_size`
+        stride and every window is scored by `predict` (flanks attached, strands
+        averaged), then averaged. Passing `MPAC_CONTEXT_UPSTREAM + 1 +
+        MPAC_CONTEXT_DOWNSTREAM` bp around a variant reproduces the sliding-window
+        scheme used for the published MPAC predictions.
+        """
+        width = self.variable_region_len
+        offsets = [range(0, len(s) - width + 1, step_size) for s in sequences]
+        assert all(len(o) for o in offsets), \
+            f"every sequence must be at least {width} bp"
+
+        flat = [s[i:i + width] for s, o in zip(sequences, offsets) for i in o]
+        preds = self.predict(flat, **kwargs)
+        assert preds.shape[0] == len(flat), \
+            f"got {preds.shape[0]} predictions for {len(flat)} windows"
+
+        out, cursor = [], 0
+        for o in offsets:
+            out.append(preds[cursor:cursor + len(o)].mean(dim=0))
+            cursor += len(o)
+        assert cursor == preds.shape[0], f"consumed {cursor} of {preds.shape[0]}"
+        return torch.stack(out)
+
+    def predict_skew(self, ref_sequences, alt_sequences, **kwargs):
+        """Allelic skew for matched reference/alternate contexts.
+
+        Returns a dict of (n, n_outputs) tensors: `ref`, `alt`, and `skew`, the
+        latter being alt minus ref.
+        """
+        assert len(ref_sequences) == len(alt_sequences), \
+            f"{len(ref_sequences)} ref vs {len(alt_sequences)} alt sequences"
+        ref = self.predict_windows(ref_sequences, **kwargs)
+        alt = self.predict_windows(alt_sequences, **kwargs)
+        return {'ref': ref, 'alt': alt, 'skew': alt - ref}
+
 
 class MPACEnsemble(nn.Module):
     """Mean prediction over a set of architecturally identical `MPACModel`s.
@@ -474,6 +520,8 @@ class MPACEnsemble(nn.Module):
         return self._template.add_flanks(x)
 
     predict = MPACModel.predict
+    predict_windows = MPACModel.predict_windows
+    predict_skew = MPACModel.predict_skew
 
     @classmethod
     def from_pretrained(cls, repo_id, chromosome, device='cpu', **kwargs):
