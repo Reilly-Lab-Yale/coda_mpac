@@ -4,7 +4,7 @@ This manuscript has several other associated repositories.
 
 ## Variant Effect Prediction
 
-To generate MPAC predictions for SNVs, first define your variants in a VCF-like TSV with the following tab-separated columns:
+To generate MPAC predictions for SNVs, first define your variants in a VCF-like TSV (no VCF header required) with the following tab-separated columns:
 
 | Column | Description |
 | --- | --- |
@@ -41,8 +41,8 @@ python vcf_predict.py \
 | `--vcf_file` | Variants of interest |
 | `--fasta_file` | Reference genome |
 | `--output` | Output path |
-| `--relative_start` | Start window position |
-| `--relative_end` | End window position |
+| `--relative_start` | First window variant position |
+| `--relative_end` | Final window variant position |
 | `--step_size` | Window step size |
 | `--strand_reduction` | Reduction method for fwd/rev strand predictions |
 | `--window_reduction` | Reduction method for window predictions |
