@@ -62,5 +62,9 @@ Haplotype predictions are handled similarly with `vcf_predict_haplotype.py`, wit
 
 Output is a VCF-like TSV with predictions occupying the `INFO` column, see below:
 
-| chrom | pos | id | ref | alt | INFO |
-| chr22 | 11121724 | COSV106573183 | A | G | K562__ref=0.3535322;HepG2__ref=0.29076257;SKNSH__ref=0.46344832;K562__alt=0.3156159;HepG2__alt=0.27474153;SKNSH__alt=0.4554421;K562__skew=-0.03791629;HepG2__skew=-0.016021034;SKNSH__skew=-0.0080062505 |
+### Example output
+
+```
+CHROM   POS         ID              REF  ALT  INFO
+chr22   11121724    COSV106573183   A    G    K562__ref=0.3535322;HepG2__ref=0.29076257;...
+```
