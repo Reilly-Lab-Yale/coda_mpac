@@ -48,6 +48,8 @@ python vcf_predict.py \
 | `--window_reduction` | Reduction method for window predictions |
 | `--feature_ids` | Labels for predictions in the output |
 
+Additonal arguments can be found in vcf_predict.py
+
 ### Small indels
 
 Small indels (≤ 10 bp recommended) are handled the same way with `vcf_predict_indel.py`, with modification to the plasmid sequence padding loop.
